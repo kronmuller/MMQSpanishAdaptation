@@ -1,6 +1,6 @@
 ---
-title: "Analyses MMQ: Translation, Adaptation and Psychometric Properties in a Chilean Population. (Aldunate et al. 2023)"
-author: "Edmundo Kronmüller"
+title: "Analyses MMQ: Translation, Adaptation and Psychometric Properties in a Chilean Population (2023)"
+author: "XXX"
 date: "2023-07-24"
 output:
   html_document: default
