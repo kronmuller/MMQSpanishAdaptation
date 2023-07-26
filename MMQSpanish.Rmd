@@ -1,0 +1,334 @@
+---
+title: "Analyses MMQ: Translation, Adaptation and Psychometric Properties in a Chilean Population. (Aldunate et al. 2023)"
+author: "Edmundo Kronmüller"
+date: "2023-07-24"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+### Set up, load packages and data
+
+```{r setup, include=TRUE, message=FALSE, results=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen=999)
+library(tidyverse)
+library(lavaan)
+library(psych)
+library(ltm)
+library(labelled)
+library(apaTables)
+library(arsenal)
+library(Hmisc)
+
+# Read data
+datos <- read_rds("datos.rds")
+
+```
+
+### Sample description of participants with no missing data on the MMQ
+```{r echo=TRUE, message=FALSE, results=FALSE, warning=FALSE}
+naniar::miss_var_summary(datos[,c(3:6,7:39)])
+socio.mmq <- datos[,c(3:6,7:39)]
+socio.mmq$edad <- ifelse(socio.mmq$edad==0, mean(socio.mmq$edad, na.rm=TRUE),socio.mmq$edad)
+socio.mmq <- na.omit(socio.mmq)
+socio.mmq <- socio.mmq[,c(1:4)]
+socio.mmq <- unlabelled(socio.mmq)
+names(socio.mmq)
+
+tab.sociodemo.mmq <- tableby(~edad+genero+educacion, data = socio.mmq)
+
+as.data.frame(summary(tab.sociodemo.mmq, text=NULL))
+
+write.table(file="sociodemo.mmq.text", tab.sociodemo.mmq <- as.data.frame(
+  summary(tab.sociodemo.mmq, text=NULL)))
+
+```
+
+
+### Descriptives by item: Frequencies
+
+```{r echo=TRUE, message=FALSE, results=FALSE, warning=FALSE}
+
+# dataframes with labels 
+datos_un.mmq = unlabelled(datos[,7:39])
+nombres.mmq = labelled::var_label(datos_un.mmq)
+nombres.mmq = unlist(nombres.mmq)
+items.un.mmq = datos_un.mmq %>% dplyr::select(1:33)
+items.un.mmq = na.omit(items.un.mmq) 
+
+# descriptives by item
+nombres.mmq <- str_sub(nombres.mmq, start = 1, end = 100)
+colnames(items.un.mmq) <- nombres.mmq
+
+desc.resp.mmq.long.pre <-
+  items.un.mmq %>% 
+  gather(key=item, value = respuesta) %>% 
+  mutate(respuesta = factor(respuesta, 
+                            levels = c("Totalmente en desacuerdo", "En desacuerdo",
+                                       "Ni de acuerdo ni en desacuerdo", "De acuerdo",
+                                       "Muy de acuerdo")))
+desc.resp.mmq.long <-   
+  desc.resp.mmq.long.pre %>%
+  dplyr::count(item,respuesta) %>% group_by(item) %>% 
+  mutate(porc = round(n/sum(n),3)*100)
+
+desc.resp.mmq.wide <- 
+  desc.resp.mmq.long %>% 
+    dplyr::select(item, respuesta, porc) %>%
+    pivot_wider(names_from = respuesta, 
+              values_from = porc)
+
+print(desc.resp.mmq.wide)
+
+
+```
+
+
+
+### Descriptives per item: Mean, standard deviation, ...
+
+```{r echo=TRUE, message=FALSE, results=FALSE, warning=FALSE}
+# dataframe for descriptives and cfa
+mmq = datos[,7:39]
+mmq = na.omit(mmq)
+
+# descriptives
+d1 <- psych::describe(mmq, type = 2, skew=TRUE,range=TRUE)
+reactivo.mmq <- data.frame(nombres.mmq)
+descriptivos.items <- cbind(reactivo.mmq, d1)
+
+print(descriptivos.items)
+
+```
+
+
+
+### Confirmatiory Factor Analysis on original scale (Gori et al., 2021)
+
+```{r echo=TRUE, message=FALSE, results=FALSE, warning=FALSE}
+
+# model definition
+model.mmq.or <- '
+refv =~ q0007_0001 + q0007_0006 + q0007_0008 + q0007_0010 + q0007_0016 + 
+  q0007_0017 + q0007_0018 + q0007_0031 + q0007_0032
+
+egov =~q0007_0011 + q0007_0022 + q0007_0024 + q0007_0025 + q0007_0026 + 
+  q0007_0030
+
+relatv =~ q0007_0004 + q0007_0005 + q0007_0014 + q0007_0021 + q0007_0028
+
+reldiv =~ q0007_0009 + q0007_0012 + q0007_0015 + q0007_0027 + q0007_0033
+
+distrv =~ q0007_0013 + q0007_0019 + q0007_0020 + q0007_0029
+
+emdisv =~ q0007_0002 + q0007_0003 + q0007_0007 + q0007_0023
+'
+
+# fit 
+mmq.fit.or <-cfa(model.mmq.or, estimator="WLSMV", ordered=names(mmq), std.lv=TRUE, data=mmq)
+
+summary(mmq.fit.or, fit.measures = TRUE)
+
+```
+
+
+### Modification indices analysis
+```{r echo=TRUE, message=FALSE, results=FALSE, warning=FALSE}
+
+# modification indices
+mi.or <- modindices(mmq.fit.or, sort=TRUE) 
+mi.or.1 <- mi.or[mi.or$op == "=~",]
+
+print(mi.or.1)
+
+```
+
+### CFA on modified scale
+```{r echo=TRUE, message=FALSE, results=FALSE, warning=FALSE}
+
+# model definition
+model.mmq.mod <- '
+refv =~ q0007_0001  + q0007_0006 + q0007_0008 + q0007_0010 + q0007_0016 + 
+  q0007_0017  
+
+egov =~q0007_0011 + q0007_0022 + q0007_0024 + q0007_0025
+
+relatv =~ q0007_0004 + q0007_0005 + q0007_0014 + q0007_0021 + q0007_0028 
+
+reldiv =~ q0007_0009 + q0007_0012 + q0007_0015 + q0007_0027 + q0007_0033
+
+distrv =~ q0007_0013 + q0007_0019 + q0007_0020 + q0007_0029
+
+emdisv =~ q0007_0002 + q0007_0003 + q0007_0007 + q0007_0023
+'
+
+mmq.fit.mod <-cfa(model.mmq.mod, estimator="WLSMV", ordered=names(mmq), std.lv=TRUE, data=mmq)
+
+summary(mmq.fit.mod, fit.measures = TRUE)
+
+#summary(mmq.fit, standardized=TRUE)
+#summary(mmq.fit.mod, fit.measures = TRUE)
+
+#mmq.fit.mod <-cfa_fit_plot(model.mmq.mod, estimator="WLSMV", ordered=names(mmq), std.lv=TRUE, data=mmq)
+
+#fittable.mod <-nice_fit(mmq.fit.mod, nice_table = TRUE)
+#flextable::save_as_docx(fittable.mod, path = "fittable_mod.docx")
+
+#loads.mod <- data.frame(inspect(mmq.fit.mod,what="std")$lambda)
+#loads.mod <- round(loads.mod,3)
+#loads.mod$names <- rownames(loads.mod)
+
+#write.csv(loads.mod, "loads.mod.csv", row.names = F)
+
+
+```
+
+
+### Descriptives on modified scale and subscales and correlations
+```{r echo=TRUE, message=FALSE, results=FALSE, warning=FALSE}
+
+# means modified scales
+mmq$refle.mod <- rowMeans(mmq[,c( 1,6,8,10,16,17)])
+mmq$egost.mod = rowMeans(mmq[,c(11,22,24,25)])
+mmq$relatt..mod = rowMeans(mmq[,c(4,5,14,21,28)])
+mmq$reldis..mod = rowMeans(mmq[,c(9,12,15,27,33)])
+mmq$distr.mod = rowMeans(mmq[,c(13,19,20,29)])
+mmq$emodis.mod = rowMeans(mmq[,c(2,3,7,23)])
+
+mmq$mmqPositive <- rowMeans(mmq[,c(34,35,36)])
+mmq$mmqNegative <- rowMeans(mmq[,c(37,38,39)])
+
+
+# test Shapiro
+s1 <- apply(mmq[,34:41], 2, shapiro.test)[[1]][[2]]
+s2 <- apply(mmq[,34:41], 2, shapiro.test)[[2]][[2]]
+s3 <- apply(mmq[,34:41], 2, shapiro.test)[[3]][[2]]
+s4 <- apply(mmq[,34:41], 2, shapiro.test)[[4]][[2]]
+s5 <- apply(mmq[,34:41], 2, shapiro.test)[[5]][[2]]
+s6 <- apply(mmq[,34:41], 2, shapiro.test)[[6]][[2]]
+s7 <- apply(mmq[,34:41], 2, shapiro.test)[[7]][[2]]
+s8 <- apply(mmq[,34:41], 2, shapiro.test)[[8]][[2]]
+
+shapiro.mod <- unlist(c(s1,s2,s3,s4,s5,s6,s7,s8))
+
+
+# Cronbach's alpha
+a1 <- alpha(mmq[,c( 1,6,8,10,16,17)])$total[2] #Reflexivity
+a2 <-alpha(mmq[,c(11,22,24,25)])$total[2] #Ego-Strenght
+a3 <-alpha(mmq[,c(4,5,14,21,28)])$total[2]#Relational Attunement
+a4 <-alpha(mmq[,c(9,12,15,27,33)])$total[2]# Relational Discomfort
+a5 <-alpha(mmq[,c(13,19,20,29)])$total[2]#Distrust
+a6 <-alpha(mmq[,c(2,3,7,23)])$total[2]#Emotional Discontrol
+apos <- alpha(mmq[,c( 1,6,8,10,16,17, 11,22,24,25,4,5,14,21,28)])$total[2]
+aneg <- alpha(mmq[,c(9,12,15,27,33,13,19,20,29,2,3,7,23)])$total[2]
+
+alphas.mod <- unlist(c(a1,a2,a3,a4,a5,a6,apos,aneg))
+
+
+d2 <- psych::describe(mmq[,34:41], type = 2, skew=TRUE,range=TRUE)
+descrip.scales <- cbind(d2,shapiro.mod,alphas.mod)
+descrip.scales$scales <- rownames(descrip.scales)
+
+print(descrip.scales)
+
+
+# correlation among scales
+rcorr(as.matrix(mmq[,34:39]))
+
+
+```
+
+
+
+### Convergent and divergent analysis: correlation matrix
+```{r eval = TRUE, message=FALSE, results=FALSE, warning=FALSE}
+
+# create dataframe with all subscales
+# MMQ
+scales_mmq = datos %>% dplyr::select(starts_with("q0007"))
+
+scales_mmq$mmq_ref <- rowMeans(scales_mmq[,c( 1,6,8,10,16,17)])
+scales_mmq$mmq_ego = rowMeans(scales_mmq[,c(11,22,24,25)])
+scales_mmq$mmq_relat = rowMeans(scales_mmq[,c(4,5,14,21,28)])
+scales_mmq$mmq_reldi = rowMeans(scales_mmq[,c(9,12,15,27,33)])
+scales_mmq$mmq_dist = rowMeans(scales_mmq[,c(13,19,20,29)])
+scales_mmq$mmq_emdis = rowMeans(scales_mmq[,c(2,3,7,23)])
+
+scales_mmq$mmqPositive <- rowMeans(scales_mmq[,c(34,35,36)])
+scales_mmq$mmqNegative <- rowMeans(scales_mmq[,c(37,38,39)])
+
+scales_mmq <- 
+  scales_mmq  %>%
+    dplyr::select(mmq_ref, mmq_ego, mmq_relat, mmq_reldi, mmq_dist, mmq_emdis,
+                  mmqPositive,mmqNegative)
+
+
+#Empathy Quotient [EQ]: ec: cognitive empathy; hs: social skills; re: emotional reactivity
+scales_eq <- datos %>% dplyr::select(starts_with("q0009"))
+
+scales_eq <- scales_eq %>% 
+  dplyr::mutate(across(.cols = c(4,8,12,14,15,27,32,35,46,48,49,50), .fns = function(x){x=5-x}))
+
+scales_eq=scales_eq %>%
+  dplyr::mutate(across(.cols = everything(), .fns = function(x){recode(x, `1`= 2, `2`=1, `3`=0, `4`=0)}))
+
+scales_eq$eq_ec <- rowMeans(scales_eq[,c(1,19,25,26,36,41,43,44,52,54,55,58,60)])
+scales_eq$eq_hs <- rowMeans(scales_eq[,c(4,8,12,14,21,35,57)])
+scales_eq$eq_re <- rowMeans(scales_eq[,c(15,27,32,42,46,48,49,50,59)])
+
+scales_eq$eqTotal <- rowMeans(scales_eq[,c(61,62,63)])
+
+scales_eq <- 
+  scales_eq  %>%
+    dplyr::select(eq_ec, eq_hs, eq_re, eqTotal)
+
+
+# Interpersonal Reactivity Index (IRI). fs: fantasy scale; pt: perspective taking; ec :empathic concern; pd: personal distress 
+scales_iri = datos %>% dplyr::select(starts_with("q0010"))
+scales_iri$fs = NULL
+scales_iri = scales_iri %>% dplyr::mutate(across(.cols = c(3,4,7,12,13,14,15,18,19), .fns = function(x){6-x}))
+scales_iri = scales_iri %>% dplyr::mutate(across(.cols = everything() , .fns = function(x){x-1}))
+
+scales_iri$iri_fs = rowMeans(scales_iri[,c(1,5,7,12,16,23,26)])
+scales_iri$iri_pd = rowMeans(scales_iri[,c(6,10,13,17,19,24,27)])
+scales_iri$iri_pt = rowMeans(scales_iri[,c(3,8,11,15,21,25,28)])
+scales_iri$iri_ec = rowMeans(scales_iri[,c(2,4,9,14,18,20,22)])
+
+scales_iri$iriTotal <- rowMeans(scales_iri[,c(29,30,31,32)])
+
+scales_iri <- 
+  scales_iri  %>%
+    dplyr::select(iri_fs, iri_pd, iri_pt, iri_ec, iriTotal)
+
+
+# Buss Perry Aggression Questionnaire (BPAQ): af: physical agression; av: verbal agression; ang: anger; host: hostility
+scales_bpaq = datos %>% dplyr::select(starts_with("q0011"))
+
+scales_bpaq$bpaq_af = rowMeans(scales_bpaq[,c(1,5,9,17,21,27,29)])
+scales_bpaq$bpaq_av = rowMeans(scales_bpaq[,c(2,6,14,18)])
+scales_bpaq$bpaq_ang = rowMeans(scales_bpaq[,c(3,7,11,22)])
+scales_bpaq$bpaq_host = rowMeans(scales_bpaq[,c(4,16,20,26,28)])
+
+scales_bpaq$bpaqTotal = rowMeans(scales_bpaq[,c(30,31,32,33)])
+
+scales_bpaq <- 
+  scales_bpaq  %>%
+    dplyr::select(bpaq_af, bpaq_av, bpaq_ang, bpaq_host)
+
+
+datos_cd <- cbind(
+scales_mmq, scales_eq, scales_iri, scales_bpaq)
+
+
+# correlation matrix
+rcorr(as.matrix(datos_cd))
+
+
+```
+
+
+
+
+
+
